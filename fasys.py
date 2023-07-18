@@ -8,32 +8,93 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 from PIL import ImageTk, Image
-import winsound
+from gtts import gTTS
+from playsound import playsound
 
 # create GUI window
 root = tk.Tk()
 root.title("Attendance Checker")
 path = Path(__file__).resolve().parent / 'Pe'
 
+def text_to_speech(text, lang='vi', speed=1):
+    tts = gTTS(text=text, lang=lang, slow=False)
+
+    # Save the audio file
+    output = Path(__file__).with_name('output.mp3')
+    tts.save(output)
+
+    # Play the audio
+    playsound(str(output))
+
+
 def empty_csv():
     with open(Path(__file__).with_name('Attendance.csv'), mode='w') as file:
         file.write('Student Name,Class,Time,Date')
         file.close()
 
+
+def register_face():
+    # create register face window
+    register_face_window = tk.Toplevel(root)
+    register_face_window.title("Register Face")
+    register_face_window.geometry("320x160")
+    register_face_window.resizable(False, False)
+
+    # create text input widget to get student name
+    student_name_label = tk.Label(register_face_window, text="Student Name: ")
+    student_name_label.grid(row=0, column=0, padx=10, pady=10)
+    student_name_entry = tk.Entry(register_face_window)
+    student_name_entry.grid(row=0, column=1, padx=10, pady=10)
+
+    # create text input widget to get student class
+    student_class_label = tk.Label(register_face_window, text="Student Class: ")
+    student_class_label.grid(row=1, column=0, padx=10, pady=10)
+    student_class_entry = tk.Entry(register_face_window)
+    student_class_entry.grid(row=1, column=1, padx=10, pady=10)
+
+    # create register button that captures face and save it to the dataset
+    def register():
+        # capture face
+        success, img = cap.read()
+
+        # save face to the dataset
+        cv2.imwrite(f'{path}/{student_name_entry.get()}_{student_class_entry.get()}.jpg', img)
+
+        # update the 'Pe' folder
+        mylist = os.listdir(path)
+        images = []
+        classNames = []
+        for cl in mylist:
+            curImg = cv2.imread(f'{path}/{cl}')
+            images.append(curImg)
+            classNames.append(os.path.splitext(cl)[0])
+        
+        register_face_window.destroy()
+
+
+    register_button = tk.Button(register_face_window, text="Register", command=register)
+    register_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+
 # menu bar that has a file menu
 menubar = tk.Menu(root) 
 filemenu = tk.Menu(menubar, tearoff=0)
 filemenu.add_command(label="Empty CSV", command=lambda: empty_csv())
+filemenu.add_command(label="Register", command=register_face)  # add register face menu item
 filemenu.add_separator()
 filemenu.add_command(label="Exit", command=root.quit)
 menubar.add_cascade(label="File", menu=filemenu)
 root.config(menu=menubar)
 
+
 images = []
 classNames = []
 mylist = os.listdir(path)
+
 for cl in mylist:
     curImg = cv2.imread(f'{path}/{cl}')
+    # make it accept utf-8 encoding
+    curImg = cv2.imdecode(np.fromfile(f'{path}/{cl}', dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+
     images.append(curImg)
     classNames.append(os.path.splitext(cl)[0])
 
@@ -48,25 +109,23 @@ def findEncodings(images):
 encoded_face_train = findEncodings(images)
 
 def markAttendance(name):
-    df = pd.read_csv(Path(__file__).with_name('Attendance.csv'))
+    # Read the csv file with utf-8 encoding support
+    df = pd.read_csv(Path(__file__).with_name('Attendance.csv'), encoding='utf-8')
     # Merge columns "Student Name" and "Class" into one column "Name Class"
     df['Name Class'] = df['Student Name'] + '_' + df['Class']
     df.drop(['Student Name', 'Class'], axis=1, inplace=True)
     df = df[['Name Class', 'Time', 'Date']]
     # Make a dummy csv file to process marking attendance
     df.to_csv(Path(__file__).with_name('Attendance_temp.csv'), index=False)
-    with open(Path(__file__).with_name('Attendance_temp.csv'),'r+', encoding='cp932', errors='ignore') as f:
+    with open(Path(__file__).with_name('Attendance_temp.csv'),'r+', encoding='utf-8', errors='ignore') as f:
         myDataList = f.readlines()
-        nameList = []
-        for line in myDataList:
-            entry = line.split(',')
-            nameList.append(entry[0])
+        nameList = [line.split(',')[0] for line in myDataList]
         if name not in nameList:
             now = datetime.now()
             time = now.strftime('%I:%M:%S:%p')
             date = now.strftime('%d-%B-%Y')
-            f.writelines(f'\n{name}, {time}, {date}')
-        f.close()
+            f.write(f'\n{name}, {time}, {date}')
+        
     # From the dummy csv file, divide the "Name Class" column into "Student Name" and "Class" columns again 
     # and save it to the original csv file
     df2 = pd.read_csv(Path(__file__).with_name('Attendance_temp.csv'))
@@ -135,7 +194,7 @@ while True:
                 tree.delete(*tree.get_children())
                 for index, row in df_updated.iterrows():
                     tree.insert('', 'end', text=index, values=list(row))
-                winsound.PlaySound('Welcome.wav', winsound.SND_ALIAS)
+                text_to_speech('Đã điểm danh em ' + name.split('_')[0])
             else:
                 attendance_label.config(text="Attendance Checked: ") # reset attendance label text
         last_update_time = current_time # update last update time
