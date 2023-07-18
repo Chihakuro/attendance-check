@@ -1,0 +1,6 @@
+pandas
+cmake
+dlib
+face_recognition
+gtts
+playsound
